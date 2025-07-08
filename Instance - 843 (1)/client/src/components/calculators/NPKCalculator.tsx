@@ -1,0 +1,380 @@
+import * as React from 'react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Calculator, Download, Save } from 'lucide-react';
+
+interface NPKResult {
+  nitrogen: number;
+  phosphorus: number;
+  potassium: number;
+  recommendations: string[];
+  totalFertilizer: number;
+  cost: number;
+}
+
+function NPKCalculator() {
+  const [formData, setFormData] = React.useState({
+    crop: '',
+    area: '',
+    soilN: '',
+    soilP: '',
+    soilK: '',
+    targetYield: '',
+    soilType: '',
+    organicMatter: '',
+    ph: '',
+    previousCrop: ''
+  });
+  
+  const [result, setResult] = React.useState<NPKResult | null>(null);
+  const [isLoading, setIsLoading] = React.useState(false);
+
+  const crops = [
+    { value: 'wheat', label: 'Wheat', nReq: 120, pReq: 60, kReq: 40 },
+    { value: 'rice', label: 'Rice', nReq: 100, pReq: 50, kReq: 50 },
+    { value: 'corn', label: 'Corn/Maize', nReq: 150, pReq: 75, kReq: 60 },
+    { value: 'soybean', label: 'Soybean', nReq: 40, pReq: 60, kReq: 80 },
+    { value: 'cotton', label: 'Cotton', nReq: 120, pReq: 60, kReq: 60 },
+    { value: 'potato', label: 'Potato', nReq: 180, pReq: 80, kReq: 200 },
+    { value: 'tomato', label: 'Tomato', nReq: 200, pReq: 100, kReq: 250 },
+    { value: 'onion', label: 'Onion', nReq: 100, pReq: 50, kReq: 50 }
+  ];
+
+  const handleInputChange = (field: string, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const calculateNPK = async () => {
+    setIsLoading(true);
+    
+    try {
+      // Simulate API call for calculation
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      const selectedCrop = crops.find(c => c.value === formData.crop);
+      if (!selectedCrop) return;
+
+      const area = parseFloat(formData.area) || 1;
+      const soilN = parseFloat(formData.soilN) || 0;
+      const soilP = parseFloat(formData.soilP) || 0;
+      const soilK = parseFloat(formData.soilK) || 0;
+      const targetYield = parseFloat(formData.targetYield) || 1;
+
+      // Yield factor adjustment
+      const yieldFactor = targetYield / 3; // Assuming 3 tons/hectare as base yield
+
+      // Calculate required nutrients (kg/hectare)
+      const reqN = selectedCrop.nReq * yieldFactor;
+      const reqP = selectedCrop.pReq * yieldFactor;
+      const reqK = selectedCrop.kReq * yieldFactor;
+
+      // Subtract soil available nutrients
+      const needN = Math.max(0, reqN - soilN) * area;
+      const needP = Math.max(0, reqP - soilP) * area;
+      const needK = Math.max(0, reqK - soilK) * area;
+
+      // Calculate total fertilizer needed (assuming 10-10-10 NPK)
+      const totalFertilizer = Math.max(needN / 0.1, needP / 0.1, needK / 0.1);
+      
+      // Estimated cost ($/kg for NPK fertilizer)
+      const cost = totalFertilizer * 0.8;
+
+      const recommendations = [
+        `Apply ${needN.toFixed(1)} kg of Nitrogen per total area`,
+        `Apply ${needP.toFixed(1)} kg of Phosphorus per total area`,
+        `Apply ${needK.toFixed(1)} kg of Potassium per total area`,
+        `Total NPK fertilizer needed: ${totalFertilizer.toFixed(1)} kg`,
+        `Split nitrogen application: 50% at planting, 30% at tillering, 20% at flowering`,
+        `Apply phosphorus and potassium at planting time`,
+        formData.organicMatter ? 'Consider organic matter content for long-term soil health' : '',
+        parseFloat(formData.ph) < 6.5 ? 'Consider lime application to raise soil pH' : '',
+        parseFloat(formData.ph) > 7.5 ? 'Monitor for nutrient deficiencies in alkaline soil' : ''
+      ].filter(Boolean);
+
+      setResult({
+        nitrogen: needN,
+        phosphorus: needP,
+        potassium: needK,
+        recommendations,
+        totalFertilizer,
+        cost
+      });
+    } catch (error) {
+      console.error('Calculation error:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const downloadReport = () => {
+    if (!result) return;
+    
+    const reportContent = `
+NPK Fertilizer Calculation Report
+================================
+
+Crop: ${crops.find(c => c.value === formData.crop)?.label}
+Area: ${formData.area} hectares
+Target Yield: ${formData.targetYield} tons/hectare
+
+Soil Nutrient Levels:
+- Nitrogen: ${formData.soilN} ppm
+- Phosphorus: ${formData.soilP} ppm  
+- Potassium: ${formData.soilK} ppm
+
+Recommended Fertilizer Application:
+- Nitrogen: ${result.nitrogen.toFixed(1)} kg
+- Phosphorus: ${result.phosphorus.toFixed(1)} kg
+- Potassium: ${result.potassium.toFixed(1)} kg
+
+Total Fertilizer: ${result.totalFertilizer.toFixed(1)} kg
+Estimated Cost: $${result.cost.toFixed(2)}
+
+Recommendations:
+${result.recommendations.map(rec => `- ${rec}`).join('\n')}
+
+Generated by Cropora NPK Calculator
+Date: ${new Date().toLocaleDateString()}
+    `.trim();
+
+    const blob = new Blob([reportContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `NPK_Report_${formData.crop}_${new Date().toISOString().split('T')[0]}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold">Crop Information</h3>
+          
+          <div className="space-y-2">
+            <Label htmlFor="crop">Crop Type</Label>
+            <Select value={formData.crop} onValueChange={(value) => handleInputChange('crop', value)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select crop" />
+              </SelectTrigger>
+              <SelectContent>
+                {crops.map(crop => (
+                  <SelectItem key={crop.value} value={crop.value}>
+                    {crop.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="area">Area (hectares)</Label>
+              <Input
+                id="area"
+                type="number"
+                placeholder="1.0"
+                value={formData.area}
+                onChange={(e) => handleInputChange('area', e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="targetYield">Target Yield (tons/ha)</Label>
+              <Input
+                id="targetYield"
+                type="number"
+                placeholder="5.0"
+                value={formData.targetYield}
+                onChange={(e) => handleInputChange('targetYield', e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="soilType">Soil Type</Label>
+            <Select value={formData.soilType} onValueChange={(value) => handleInputChange('soilType', value)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select soil type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="clay">Clay</SelectItem>
+                <SelectItem value="loam">Loam</SelectItem>
+                <SelectItem value="sandy">Sandy</SelectItem>
+                <SelectItem value="silt">Silt</SelectItem>
+                <SelectItem value="clay-loam">Clay Loam</SelectItem>
+                <SelectItem value="sandy-loam">Sandy Loam</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold">Soil Test Results</h3>
+          
+          <div className="grid grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="soilN">Nitrogen (ppm)</Label>
+              <Input
+                id="soilN"
+                type="number"
+                placeholder="20"
+                value={formData.soilN}
+                onChange={(e) => handleInputChange('soilN', e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="soilP">Phosphorus (ppm)</Label>
+              <Input
+                id="soilP"
+                type="number"
+                placeholder="15"
+                value={formData.soilP}
+                onChange={(e) => handleInputChange('soilP', e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="soilK">Potassium (ppm)</Label>
+              <Input
+                id="soilK"
+                type="number"
+                placeholder="120"
+                value={formData.soilK}
+                onChange={(e) => handleInputChange('soilK', e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="ph">Soil pH</Label>
+              <Input
+                id="ph"
+                type="number"
+                step="0.1"
+                placeholder="6.5"
+                value={formData.ph}
+                onChange={(e) => handleInputChange('ph', e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="organicMatter">Organic Matter (%)</Label>
+              <Input
+                id="organicMatter"
+                type="number"
+                step="0.1"
+                placeholder="2.5"
+                value={formData.organicMatter}
+                onChange={(e) => handleInputChange('organicMatter', e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="previousCrop">Previous Crop</Label>
+            <Select value={formData.previousCrop} onValueChange={(value) => handleInputChange('previousCrop', value)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select previous crop" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="wheat">Wheat</SelectItem>
+                <SelectItem value="rice">Rice</SelectItem>
+                <SelectItem value="corn">Corn</SelectItem>
+                <SelectItem value="soybean">Soybean</SelectItem>
+                <SelectItem value="fallow">Fallow</SelectItem>
+                <SelectItem value="vegetable">Vegetables</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex justify-center">
+        <Button 
+          onClick={calculateNPK} 
+          disabled={!formData.crop || !formData.area || isLoading}
+          size="lg"
+          className="bg-green-600 hover:bg-green-700"
+        >
+          <Calculator className="h-4 w-4 mr-2" />
+          {isLoading ? 'Calculating...' : 'Calculate NPK Dose'}
+        </Button>
+      </div>
+
+      {result && (
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              NPK Calculation Results
+              <div className="space-x-2">
+                <Button variant="outline" size="sm" onClick={downloadReport}>
+                  <Download className="h-4 w-4 mr-2" />
+                  Download Report
+                </Button>
+                <Button variant="outline" size="sm">
+                  <Save className="h-4 w-4 mr-2" />
+                  Save Calculation
+                </Button>
+              </div>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <Card>
+                <CardContent className="p-4 text-center">
+                  <div className="text-2xl font-bold text-blue-600">{result.nitrogen.toFixed(1)} kg</div>
+                  <div className="text-sm text-muted-foreground">Nitrogen (N)</div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4 text-center">
+                  <div className="text-2xl font-bold text-orange-600">{result.phosphorus.toFixed(1)} kg</div>
+                  <div className="text-sm text-muted-foreground">Phosphorus (P)</div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4 text-center">
+                  <div className="text-2xl font-bold text-purple-600">{result.potassium.toFixed(1)} kg</div>
+                  <div className="text-sm text-muted-foreground">Potassium (K)</div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4 text-center">
+                  <div className="text-2xl font-bold text-green-600">${result.cost.toFixed(2)}</div>
+                  <div className="text-sm text-muted-foreground">Estimated Cost</div>
+                </CardContent>
+              </Card>
+            </div>
+
+            <div>
+              <h4 className="text-lg font-semibold mb-3">Recommendations</h4>
+              <div className="space-y-2">
+                {result.recommendations.map((rec, index) => (
+                  <div key={index} className="flex items-start space-x-2">
+                    <div className="w-2 h-2 bg-green-600 rounded-full mt-2 flex-shrink-0"></div>
+                    <p className="text-sm text-muted-foreground">{rec}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-yellow-50 dark:bg-yellow-950 p-4 rounded-lg">
+              <h4 className="font-semibold text-yellow-800 dark:text-yellow-200 mb-2">Important Notes:</h4>
+              <ul className="text-sm text-yellow-700 dark:text-yellow-300 space-y-1">
+                <li>• These calculations are based on general recommendations and soil test results</li>
+                <li>• Consult with local agricultural experts for region-specific advice</li>
+                <li>• Consider weather conditions and irrigation when applying fertilizers</li>
+                <li>• Regular soil testing every 2-3 years is recommended for accuracy</li>
+              </ul>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+export default NPKCalculator;
